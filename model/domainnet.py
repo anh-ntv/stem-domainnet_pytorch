@@ -34,3 +34,35 @@ class DomainNetClassifier(nn.Module):
         feature = torch.flatten(feature, 1)
         feature = self.linear(feature)
         return feature
+
+
+class DomainNetDis(nn.Module):
+    def __init__(self, backbone, num_domain=5, data_parallel=True):
+        super(DomainNetDis, self).__init__()
+        linear = nn.Sequential()
+        linear.add_module("fc", nn.Linear(feature_dict[backbone], num_domain))
+        if data_parallel:
+            self.linear = nn.DataParallel(linear)
+        else:
+            self.linear = linear
+
+    def forward(self, feature):
+        feature = torch.flatten(feature, 1)
+        feature = self.linear(feature)
+        return feature
+
+
+class DomainNetGAN(nn.Module):
+    def __init__(self, backbone, num_out=1, data_parallel=True):
+        super(DomainNetGAN, self).__init__()
+        linear = nn.Sequential()
+        linear.add_module("fc", nn.Linear(feature_dict[backbone], num_out))
+        if data_parallel:
+            self.linear = nn.DataParallel(linear)
+        else:
+            self.linear = linear
+
+    def forward(self, feature):
+        feature = torch.flatten(feature, 1)
+        feature = self.linear(feature)
+        return feature
