@@ -27,7 +27,7 @@ parser = argparse.ArgumentParser(description='K3DA Official Implement')
 # Dataset Parameters
 parser.add_argument("--config", default="DigitFive.yaml")
 parser.add_argument('-bp', '--base-path', default=".")
-parser.add_argument('-dp', '--data-path', default="../dataset")
+parser.add_argument('-datap', '--data-path', default="../datasets")
 parser.add_argument('--target-domain', type=str, help="The target domain we want to perform domain adaptation")
 parser.add_argument('--source-domains', type=str, nargs="+", help="The source domains we want to use")
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
@@ -295,10 +295,10 @@ def main(args=args, configs=configs):
               attack_level=configs["UMDAConfig"]["malicious"]["attack_level"])
         print("TEST_SRC")
         test(args.target_domain, args.source_domains, test_dloaders, generator_model, classifiers, epoch,
-             writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10))
+             writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200)
         print("TEST_SRC_TRAIN")
         test(args.target_domain, args.source_domains, test_dloaders_train, generator_model, classifiers, epoch,
-             writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=100)
+             writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200)
 
         opt_sche_g.step(epoch)
         for scheduler in opt_sche_classifiers:

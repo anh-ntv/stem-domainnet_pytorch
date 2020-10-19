@@ -22,31 +22,35 @@ def train(train_dloader_list, generator_model, classifier_list, optimizer_g, cla
     else:
         model_aggregation_frequency = 1
 
+    src_train_dloader = train_dloader_list[1]
     for f in range(model_aggregation_frequency):
         # current_domain_index = 0
         # Train model locally on source domains
-        for i in range(batch_per_epoch):
+        for i, (image_s_lst, label_s_lst) in enumerate(src_train_dloader):
+            if i == batch_per_epoch:
+                break
             loss_class_src_lst = []
-            src_train_dloader = train_dloader_list[1]
-            for image_s_lst, label_s_lst in src_train_dloader:
-                for idx, classifier in enumerate(classifier_list):
-                    if idx == 0:
-                        continue
-                    image_s = image_s_lst[:, idx].cuda()
-                    label_s = label_s_lst[:, idx].long().cuda()
+            image_s_lst = image_s_lst.cuda()
+            label_s_lst = label_s_lst.long().cuda()
+            for idx, classifier in enumerate(classifier_list):
+                if idx == 0:
+                    continue
+                image_s = image_s_lst[:, idx-1]
+                label_s = label_s_lst[:, idx-1]
+                # each source domain do optimize
+                feature_s = generator_model(image_s)
+                output_s = classifier(feature_s)
+                task_loss_s = task_criterion(output_s, label_s)
+                loss_class_src_lst.append(task_loss_s)
 
-                    # each source domain do optimize
-                    feature_s = generator_model(image_s)
-                    output_s = classifier(feature_s)
-                    task_loss_s = task_criterion(output_s, label_s)
-                    loss_class_src_lst.append(task_loss_s)
-                    break
             optimizer_g.zero_grad()
             for op_h in classifier_optimizer_list[1:]:
                 op_h.zero_grad()
 
             loss_class_src_sum = sum(loss_class_src_lst)
-            loss_class_src_sum.backward()
+            if i == batch_per_epoch - 1 or i == 0:
+                print(loss_class_src_sum.item())
+            loss_class_src_sum.backward(retain_graph=True)
             optimizer_g.step()
 
             for op_h in classifier_optimizer_list[1:]:

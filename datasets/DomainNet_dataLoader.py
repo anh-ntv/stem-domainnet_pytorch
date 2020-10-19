@@ -31,10 +31,10 @@ class DomainNetLoader_train(Dataset):
         self.transforms = transforms
 
         self.data_info_lst = []
-        min_len = 0
+        min_len = 100000000
         for idx, d_n in enumerate(domain_name_lst):
             # idx must be the same with idx of the classifier for this domain
-            data_path_i, data_label_i = get_domainnet_data(dataset_path, d_n, "_train")
+            data_path_i, data_label_i = get_domainnet_data(dataset_path, d_n, "train")
             if len(data_label_i) < min_len:
                 min_len = len(data_label_i)
             self.data_info_lst.append([idx, d_n, data_path_i, data_label_i])
@@ -49,14 +49,14 @@ class DomainNetLoader_train(Dataset):
             label = data_label_i[index]
             img = self.transforms(img)
             img_lst.append(img)
-            label_lst.append(label)
-        return img_lst, label_lst
+            label_lst.append(torch.tensor(label))
+        return torch.stack(img_lst), torch.stack(label_lst)
 
     def __len__(self):
         return self.min_data_len
 
 
-def get_domainnet_dloader_train(dataset_path, domain_name, batch_size, num_workers):
+def get_domainnet_dloader_train(dataset_path, domain_name_lst, batch_size, num_workers):
     transforms_train = transforms.Compose([
         transforms.RandomResizedCrop(224, scale=(0.75, 1)),
         transforms.RandomHorizontalFlip(),
@@ -84,7 +84,7 @@ def get_domainnet_dloader_train(dataset_path, domain_name, batch_size, num_worke
     #     transforms.ToTensor()
     # ])
 
-    train_dataset = DomainNetLoader_train(transforms_train, domain_name, dataset_path)
+    train_dataset = DomainNetLoader_train(domain_name_lst, transforms_train, dataset_path)
     train_dloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=True,
                                shuffle=True)
     return train_dloader
