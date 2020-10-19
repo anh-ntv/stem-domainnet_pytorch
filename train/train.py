@@ -27,10 +27,13 @@ def train(train_dloader_list, generator_model, classifier_list, optimizer_g, cla
         # Train model locally on source domains
         for i in range(batch_per_epoch):
             loss_class_src_lst = []
-            for train_dloader, classifier in zip(train_dloader_list[1:], classifier_list[1:]):
-                for image_s, label_s in train_dloader:
-                    image_s = image_s.cuda()
-                    label_s = label_s.long().cuda()
+            src_train_dloader = train_dloader_list[1]
+            for image_s_lst, label_s_lst in src_train_dloader:
+                for idx, classifier in enumerate(classifier_list):
+                    if idx == 0:
+                        continue
+                    image_s = image_s_lst[:, idx].cuda()
+                    label_s = label_s_lst[:, idx].long().cuda()
 
                     # each source domain do optimize
                     feature_s = generator_model(image_s)
@@ -115,7 +118,7 @@ def train(train_dloader_list, generator_model, classifier_list, optimizer_g, cla
 
 
 def test(target_domain, source_domains, test_dloader_list, generator_model, classifier_list, epoch, writer, num_classes=126,
-         top_5_accuracy=True):
+         top_5_accuracy=True, test_iter=None):
     source_domain_losses = [AverageMeter() for i in source_domains]
     target_domain_losses = AverageMeter()
     task_criterion = nn.CrossEntropyLoss().cuda()
@@ -162,7 +165,9 @@ def test(target_domain, source_domains, test_dloader_list, generator_model, clas
         tmp_score = []
         tmp_label = []
         test_dloader_s = test_dloader_list[s_i + 1]
-        for _, (image_s, label_s) in enumerate(test_dloader_s):
+        for it, (image_s, label_s) in enumerate(test_dloader_s):
+            if test_iter is not None and it >= test_iter:
+                break
             image_s = image_s.cuda()
             label_s = label_s.long().cuda()
             with torch.no_grad():
@@ -182,7 +187,7 @@ def test(target_domain, source_domains, test_dloader_list, generator_model, clas
         top_1_accuracy_s = float(torch.sum(y_true == y_pred[:, :1]).item()) / y_true.size(0)
         writer.add_scalar(tag="Test/source_domain_{}_accuracy_top1".format(domain_s), scalar_value=top_1_accuracy_s,
                           global_step=epoch + 1)
-        print("{}_accuracy_top1: {:.3f}".format(domain_s))
+        print("\t{} \tloss: {:.3f}\tacc: {:.3f}".format(domain_s,source_domain_losses[s_i].avg, top_1_accuracy_s*100.0))
         # if top_5_accuracy:
         #     top_5_accuracy_s = float(torch.sum(y_true == y_pred).item()) / y_true.size(0)
         #     writer.add_scalar(tag="Test/source_domain_{}_accuracy_top5".format(domain_s), scalar_value=top_5_accuracy_s,
