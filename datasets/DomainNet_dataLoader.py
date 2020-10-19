@@ -4,6 +4,7 @@ from PIL import Image
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
 import torch
+import random
 
 
 def get_domainnet_data(dataset_path, domain_name, tail_name="train"):
@@ -43,10 +44,11 @@ class DomainNetLoader_train(Dataset):
     def __getitem__(self, index):
         img_lst, label_lst = [], []
         for idx, d_n, data_path_i, data_label_i in self.data_info_lst:
-            img = Image.open(data_path_i[index])
+            i_choice = random.randrange(0, len(data_path_i))
+            img = Image.open(data_path_i[i_choice])
             if not img.mode == "RGB":
                 img = img.convert("RGB")
-            label = data_label_i[index]
+            label = data_label_i[i_choice]
             img = self.transforms(img)
             img_lst.append(img)
             label_lst.append(torch.tensor(label))
