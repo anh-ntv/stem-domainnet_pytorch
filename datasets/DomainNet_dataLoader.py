@@ -62,6 +62,7 @@ def get_domainnet_dloader_train(dataset_path, domain_name_lst, batch_size, num_w
     transforms_train = transforms.Compose([
         transforms.RandomResizedCrop(224, scale=(0.75, 1)),
         transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
         transforms.ToTensor()
     ])
     # transforms_test = transforms.Compose([
