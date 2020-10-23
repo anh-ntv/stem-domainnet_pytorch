@@ -12,7 +12,7 @@ from model.officecaltech10 import OfficeCaltechNet, OfficeCaltechClassifier
 from model.domainnet import DomainNet, DomainNetClassifier, DomainNetDis, DomainNetGAN
 from datasets.DigitFive import digit5_dataset_read
 from lib.utils.federated_utils import *
-from train.train import train, test
+from train.train import train, test, train_phase_2, test_trg
 from datasets.OfficeCaltech10 import get_office_caltech10_dloader
 from datasets.DomainNet_dataset import get_domainnet_dloader
 from datasets.DomainNet_dataLoader import get_domainnet_dloader_train
@@ -61,176 +61,187 @@ torch.manual_seed(1)
 torch.cuda.manual_seed(1)
 
 
+# def main(args=args, configs=configs):
+#     src_domains = ['clipart', 'infograph', 'painting', 'quickdraw', 'real', 'sketch']
+#     src_domains.remove(args.target_domain)
+#
+#     num_classes = 345
+#     train_dloaders = []
+#     test_dloaders = []
+#     test_dloaders_train = []
+#     classifiers = []
+#     optimizer_h_lst = []
+#     opt_sche_classifiers = []
+#
+#     # create dataloader for training process
+#     target_train_dloader, target_test_dloader = get_domainnet_dloader(args.data_path,
+#                                                                       args.target_domain,
+#                                                                       configs["TrainingConfig"]["batch_size"],
+#                                                                       args.workers)
+#     train_dloaders.append(target_train_dloader)
+#     src_train_dloader = get_domainnet_dloader_train(args.data_path, src_domains,
+#                                                                       configs["TrainingConfig"]["batch_size"],
+#                                                                       args.workers)
+#     train_dloaders.append(src_train_dloader)
+#
+#     # create dataLoader for target for testing process
+#     test_dloaders.append(target_test_dloader)
+#     test_dloaders_train.append(target_train_dloader)
+#
+#     generator_model = DomainNet(configs["ModelConfig"]["backbone"], args.bn_momentum, configs["ModelConfig"]["pretrained"],
+#                   args.data_parallel).cuda()
+#
+#     dis_model = DomainNetDis(configs["ModelConfig"]["backbone"], len(src_domains) - 1, args.data_parallel).cuda()
+#     gan_model = DomainNetGAN(configs["ModelConfig"]["backbone"], 1, args.data_parallel).cuda()
+#
+#     classifiers.append(DomainNetClassifier(configs["ModelConfig"]["backbone"], num_classes, args.data_parallel).cuda())
+#     args.source_domains = src_domains
+#
+#     # create dataLoader for src for testing process (include both train and test data)
+#     for domain in src_domains:
+#         source_train_dloader, source_test_dloader = get_domainnet_dloader(args.data_path, domain,
+#                                                                           configs["TrainingConfig"]["batch_size"],
+#                                                                           args.workers)
+#         test_dloaders.append(source_test_dloader)
+#         test_dloaders_train.append(source_train_dloader)
+#         classifiers.append(DomainNetClassifier(configs["ModelConfig"]["backbone"], 345, args.data_parallel).cuda())
+#
+#     optimizer_g = torch.optim.SGD(generator_model.parameters(), momentum=args.momentum,
+#                         lr=configs["TrainingConfig"]["learning_rate_begin"], weight_decay=args.wd)
+#
+#     ##################################
+#     optimizer_dis = torch.optim.SGD(dis_model.parameters(), momentum=args.momentum,
+#                         lr=configs["TrainingConfig"]["learning_rate_begin"], weight_decay=args.wd)
+#     optimizer_gan = torch.optim.SGD(gan_model.parameters(), momentum=args.momentum,
+#                         lr=configs["TrainingConfig"]["learning_rate_begin"], weight_decay=args.wd)
+#     #################################
+#
+#     for classifier in classifiers:
+#         optimizer_h_lst.append(
+#             torch.optim.SGD(classifier.parameters(), momentum=args.momentum,
+#                             lr=configs["TrainingConfig"]["learning_rate_begin"], weight_decay=args.wd))
+#     # create the optimizer scheduler with cosine annealing schedule
+#
+#     opt_sche_g = CosineAnnealingLR(optimizer_g, configs["TrainingConfig"]["total_epochs"],
+#                           eta_min=configs["TrainingConfig"]["learning_rate_end"])
+#     opt_sche_dis = CosineAnnealingLR(optimizer_dis, configs["TrainingConfig"]["total_epochs"],
+#                           eta_min=configs["TrainingConfig"]["learning_rate_end"])
+#     opt_sche_gan = CosineAnnealingLR(optimizer_gan, configs["TrainingConfig"]["total_epochs"],
+#                           eta_min=configs["TrainingConfig"]["learning_rate_end"])
+#     for classifier_optimizer in optimizer_h_lst:
+#         opt_sche_classifiers.append(
+#             CosineAnnealingLR(classifier_optimizer, configs["TrainingConfig"]["total_epochs"],
+#                               eta_min=configs["TrainingConfig"]["learning_rate_end"]))
+#     # create the event to save log info
+#     writer_log_dir = path.join(args.base_path, configs["DataConfig"]["dataset"], "runs",
+#                                "train_time:{}".format(args.train_time) + "_" +
+#                                args.target_domain + "_" + "_".join(args.source_domains))
+#     print("create writer in {}".format(writer_log_dir))
+#     if os.path.exists(writer_log_dir):
+#         flag = input("{} train_time:{} will be removed, input yes to continue:".format(
+#             configs["DataConfig"]["dataset"], args.train_time))
+#         if flag == "yes":
+#             shutil.rmtree(writer_log_dir, ignore_errors=True)
+#     writer = SummaryWriter(log_dir=writer_log_dir)
+#     # begin train
+#     print("Begin the {} time's training, Dataset:{}, Source Domains {}, Target Domain {}".format(args.train_time,
+#                                                                                                  configs[
+#                                                                                                      "DataConfig"][
+#                                                                                                      "dataset"],
+#                                                                                                  args.source_domains,
+#                                                                                                  args.target_domain))
+#
+#     # create the initialized domain weight
+#     domain_weight = create_domain_weight(len(args.source_domains))
+#     # adjust training strategy with communication round
+#     batch_per_epoch, total_epochs = decentralized_training_strategy(
+#         communication_rounds=configs["UMDAConfig"]["communication_rounds"],
+#         epoch_samples=configs["TrainingConfig"]["epoch_samples"],
+#         batch_size=configs["TrainingConfig"]["batch_size"],
+#         total_epochs=configs["TrainingConfig"]["total_epochs"])
+#     # train generator_model
+#     for epoch in range(args.start_epoch, total_epochs):
+#         train(train_dloaders, generator_model, dis_model, gan_model, classifiers,
+#               optimizer_g, optimizer_dis, optimizer_gan,
+#               optimizer_h_lst, epoch, writer, num_classes=num_classes,
+#               domain_weight=domain_weight, source_domains=args.source_domains,
+#               batch_per_epoch=batch_per_epoch, total_epochs=total_epochs,
+#               batchnorm_mmd=configs["UMDAConfig"]["batchnorm_mmd"],
+#               communication_rounds=configs["UMDAConfig"]["communication_rounds"],
+#               confidence_gate_begin=configs["UMDAConfig"]["confidence_gate_begin"],
+#               confidence_gate_end=configs["UMDAConfig"]["confidence_gate_end"],
+#               malicious_domain=configs["UMDAConfig"]["malicious"]["attack_domain"],
+#               attack_level=configs["UMDAConfig"]["malicious"]["attack_level"])
+#         print("TEST_SRC")
+#         test(args.target_domain, args.source_domains, test_dloaders, generator_model, classifiers, epoch,
+#              writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200)
+#         print("TEST_SRC_TRAIN")
+#         test(args.target_domain, args.source_domains, test_dloaders_train, generator_model, classifiers, epoch,
+#              writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200)
+#
+#         opt_sche_g.step(epoch)
+#         opt_sche_dis.step(epoch)
+#         opt_sche_gan.step(epoch)
+#         for scheduler in opt_sche_classifiers:
+#             scheduler.step(epoch)
+#         # save generator_model every 10 epochs
+#         # if (epoch + 1) % 10 == 0:
+#         #     # save target generator_model with epoch, domain, generator_model, optimizer
+#         #     save_checkpoint(
+#         #         {"epoch": epoch + 1,
+#         #          "domain": args.target_domain,
+#         #          "backbone": generator_model[0].state_dict(),
+#         #          "classifier": classifiers[0].state_dict(),
+#         #          "optimizer": optimizer_g[0].state_dict(),
+#         #          "classifier_optimizer": optimizer_h_lst[0].state_dict()
+#         #          },
+#         #         filename="{}.pth.tar".format(args.target_domain))
+
+
 def main(args=args, configs=configs):
-    # set the dataloader list, generator_model list, optimizer list, optimizer schedule list
+    src_domains = ['clipart', 'infograph', 'painting', 'quickdraw', 'real', 'sketch']
+    src_domains.remove(args.target_domain)
+
+    num_classes = 345
     train_dloaders = []
     test_dloaders = []
-    generator_model = []
+    test_dloaders_train = []
     classifiers = []
-    optimizer_g = []
     optimizer_h_lst = []
-    opt_sche_g = []
     opt_sche_classifiers = []
-    # build dataset
-    # if configs["DataConfig"]["dataset"] == "DigitFive":
-    #     src_domains = ['mnistm', 'mnist', 'syn', 'usps', 'svhn']
-    #     # [0]: target dataset, target backbone, [1:-1]: source dataset, source backbone
-    #     # generate dataset for train and target
-    #     print("load target domain {}".format(args.target_domain))
-    #     target_train_dloader, target_test_dloader = digit5_dataset_read(args.base_path,
-    #                                                                     args.target_domain,
-    #                                                                     configs["TrainingConfig"]["batch_size"])
-    #     train_dloaders.append(target_train_dloader)
-    #     test_dloaders.append(target_test_dloader)
-    #     # generate CNN and Classifier for target domain
-    #     generator_model.append(CNN(args.data_parallel).cuda())
-    #     classifiers.append(Classifier(args.data_parallel).cuda())
-    #     src_domains.remove(args.target_domain)
-    #     args.source_domains = src_domains
-    #     print("target domain {} loaded".format(args.target_domain))
-    #     # create DigitFive dataset
-    #     print("Source Domains :{}".format(src_domains))
-    #     for domain in src_domains:
-    #         # generate dataset for source domain
-    #         source_train_dloader, source_test_dloader = digit5_dataset_read(args.base_path, domain,
-    #                                                                         configs["TrainingConfig"]["batch_size"])
-    #         train_dloaders.append(source_train_dloader)
-    #         test_dloaders.append(source_test_dloader)
-    #         # generate CNN and Classifier for source domain
-    #         generator_model.append(CNN(args.data_parallel).cuda())
-    #         classifiers.append(Classifier(args.data_parallel).cuda())
-    #         print("Domain {} Preprocess Finished".format(domain))
-    #     num_classes = 10
-    # elif configs["DataConfig"]["dataset"] == "OfficeCaltech10":
-    #     src_domains = ['amazon', 'webcam', 'dslr', "caltech"]
-    #     train_dloaders = []
-    #     test_dloaders = []
-    #     generator_model = []
-    #     classifiers = []
-    #     optimizer_g = []
-    #     optimizer_h_lst = []
-    #     opt_sche_g = []
-    #     opt_sche_classifiers = []
-    #     target_train_dloader, target_test_dloader = get_office_caltech10_dloader(args.base_path,
-    #                                                                              args.target_domain,
-    #                                                                              configs["TrainingConfig"]["batch_size"]
-    #                                                                              , args.workers)
-    #     train_dloaders.append(target_train_dloader)
-    #     test_dloaders.append(target_test_dloader)
-    #     generator_model.append(
-    #         OfficeCaltechNet(configs["ModelConfig"]["backbone"], bn_momentum=args.bn_momentum,
-    #                          pretrained=configs["ModelConfig"]["pretrained"],
-    #                          data_parallel=args.data_parallel).cuda())
-    #     classifiers.append(
-    #         OfficeCaltechClassifier(configs["ModelConfig"]["backbone"], 10, args.data_parallel).cuda()
-    #     )
-    #     src_domains.remove(args.target_domain)
-    #     args.source_domains = src_domains
-    #     for domain in src_domains:
-    #         source_train_dloader, source_test_dloader = get_office_caltech10_dloader(args.base_path, domain,
-    #                                                                                  configs["TrainingConfig"][
-    #                                                                                      "batch_size"], args.workers)
-    #         train_dloaders.append(source_train_dloader)
-    #         test_dloaders.append(source_test_dloader)
-    #         generator_model.append(
-    #             OfficeCaltechNet(configs["ModelConfig"]["backbone"], args.bn_momentum,
-    #                              pretrained=configs["ModelConfig"]["pretrained"],
-    #                              data_parallel=args.data_parallel).cuda())
-    #         classifiers.append(
-    #             OfficeCaltechClassifier(configs["ModelConfig"]["backbone"], 10, args.data_parallel).cuda()
-    #         )
-    #     num_classes = 10
-    # elif configs["DataConfig"]["dataset"] == "Office31":
-    #     src_domains = ['amazon', 'webcam', 'dslr']
-    #     train_dloaders = []
-    #     test_dloaders = []
-    #     generator_model = []
-    #     classifiers = []
-    #     optimizer_g = []
-    #     optimizer_h_lst = []
-    #     opt_sche_g = []
-    #     opt_sche_classifiers = []
-    #     target_train_dloader, target_test_dloader = get_office31_dloader(args.base_path,
-    #                                                                      args.target_domain,
-    #                                                                      configs["TrainingConfig"]["batch_size"],
-    #                                                                      args.workers)
-    #     train_dloaders.append(target_train_dloader)
-    #     test_dloaders.append(target_test_dloader)
-    #     generator_model.append(
-    #         OfficeCaltechNet(configs["ModelConfig"]["backbone"], bn_momentum=args.bn_momentum,
-    #                          pretrained=configs["ModelConfig"]["pretrained"],
-    #                          data_parallel=args.data_parallel).cuda())
-    #     classifiers.append(
-    #         OfficeCaltechClassifier(configs["ModelConfig"]["backbone"], 31, args.data_parallel).cuda()
-    #     )
-    #     src_domains.remove(args.target_domain)
-    #     args.source_domains = src_domains
-    #     for domain in src_domains:
-    #         source_train_dloader, source_test_dloader = get_office31_dloader(args.base_path, domain,
-    #                                                                          configs["TrainingConfig"]["batch_size"],
-    #                                                                          args.workers)
-    #         train_dloaders.append(source_train_dloader)
-    #         test_dloaders.append(source_test_dloader)
-    #         generator_model.append(
-    #             OfficeCaltechNet(configs["ModelConfig"]["backbone"], args.bn_momentum,
-    #                              pretrained=configs["ModelConfig"]["pretrained"],
-    #                              data_parallel=args.data_parallel).cuda())
-    #         classifiers.append(
-    #             OfficeCaltechClassifier(configs["ModelConfig"]["backbone"], 31, args.data_parallel).cuda()
-    #         )
-    #     num_classes = 31
-    if configs["DataConfig"]["dataset"] == "DomainNet":
-        src_domains = ['clipart', 'infograph', 'painting', 'quickdraw', 'real', 'sketch']
-        src_domains.remove(args.target_domain)
 
-        num_classes = 345
-        train_dloaders = []
-        test_dloaders = []
-        test_dloaders_train = []
-        classifiers = []
-        optimizer_h_lst = []
-        opt_sche_classifiers = []
+    # create dataloader for training process
+    target_train_dloader, target_test_dloader = get_domainnet_dloader(args.data_path,
+                                                                      args.target_domain,
+                                                                      configs["TrainingConfig"]["batch_size"],
+                                                                      args.workers)
+    train_dloaders.append(target_train_dloader)
+    # src_train_dloader = get_domainnet_dloader_train(args.data_path, src_domains,
+    #                                                                   configs["TrainingConfig"]["batch_size"],
+    #                                                                   args.workers)
+    # train_dloaders.append(src_train_dloader)
 
-        # create dataloader for training process
-        target_train_dloader, target_test_dloader = get_domainnet_dloader(args.data_path,
-                                                                          args.target_domain,
+    # create dataLoader for target for testing process
+    test_dloaders.append(target_test_dloader)
+    test_dloaders_train.append(target_train_dloader)
+
+    generator_model = DomainNet(configs["ModelConfig"]["backbone"], args.bn_momentum, configs["ModelConfig"]["pretrained"],
+                  args.data_parallel).cuda()
+
+    dis_model = DomainNetDis(configs["ModelConfig"]["backbone"], len(src_domains), args.data_parallel).cuda()
+    gan_model = DomainNetGAN(configs["ModelConfig"]["backbone"], 1, args.data_parallel).cuda()
+
+    classifiers.append(DomainNetClassifier(configs["ModelConfig"]["backbone"], num_classes, args.data_parallel).cuda())
+    args.source_domains = src_domains
+
+    # create dataLoader for src for testing process (include both train and test data)
+    for domain in src_domains:
+        source_train_dloader, source_test_dloader = get_domainnet_dloader(args.data_path, domain,
                                                                           configs["TrainingConfig"]["batch_size"],
                                                                           args.workers)
-        train_dloaders.append(target_train_dloader)
-        src_train_dloader = get_domainnet_dloader_train(args.data_path, src_domains,
-                                                                          configs["TrainingConfig"]["batch_size"],
-                                                                          args.workers)
-        train_dloaders.append(src_train_dloader)
-
-        # create dataLoader for target for testing process
-        test_dloaders.append(target_test_dloader)
-        test_dloaders_train.append(target_train_dloader)
-
-        generator_model = DomainNet(configs["ModelConfig"]["backbone"], args.bn_momentum, configs["ModelConfig"]["pretrained"],
-                      args.data_parallel).cuda()
-
-        dis_model = DomainNetDis(configs["ModelConfig"]["backbone"], len(src_domains) - 1, args.data_parallel).cuda()
-        gan_model = DomainNetGAN(configs["ModelConfig"]["backbone"], 1, args.data_parallel).cuda()
-
-        classifiers.append(DomainNetClassifier(configs["ModelConfig"]["backbone"], num_classes, args.data_parallel).cuda())
-        args.source_domains = src_domains
-
-        # create dataLoader for src for testing process (include both train and test data)
-        for domain in src_domains:
-            source_train_dloader, source_test_dloader = get_domainnet_dloader(args.data_path, domain,
-                                                                              configs["TrainingConfig"]["batch_size"],
-                                                                              args.workers)
-            test_dloaders.append(source_test_dloader)
-            test_dloaders_train.append(source_train_dloader)
-            classifiers.append(DomainNetClassifier(configs["ModelConfig"]["backbone"], 345, args.data_parallel).cuda())
-    else:
-        raise NotImplementedError("Dataset {} not implemented".format(configs["DataConfig"]["dataset"]))
-    # federated learning step 1: initialize generator_model with the same parameter (use target as standard)
-    # for generator_model in generator_model[1:]:
-    #     for source_weight, target_weight in zip(generator_model.named_parameters(), generator_model[0].named_parameters()):
-    #         # consistent parameters
-    #         source_weight[1].data = target_weight[1].data.clone()
-    # create the optimizer for each generator_model
+        test_dloaders.append(source_test_dloader)
+        test_dloaders_train.append(source_train_dloader)
+        classifiers.append(DomainNetClassifier(configs["ModelConfig"]["backbone"], 345, args.data_parallel).cuda())
 
     optimizer_g = torch.optim.SGD(generator_model.parameters(), momentum=args.momentum,
                         lr=configs["TrainingConfig"]["learning_rate_begin"], weight_decay=args.wd)
@@ -249,6 +260,10 @@ def main(args=args, configs=configs):
     # create the optimizer scheduler with cosine annealing schedule
 
     opt_sche_g = CosineAnnealingLR(optimizer_g, configs["TrainingConfig"]["total_epochs"],
+                          eta_min=configs["TrainingConfig"]["learning_rate_end"])
+    opt_sche_dis = CosineAnnealingLR(optimizer_dis, configs["TrainingConfig"]["total_epochs"],
+                          eta_min=configs["TrainingConfig"]["learning_rate_end"])
+    opt_sche_gan = CosineAnnealingLR(optimizer_gan, configs["TrainingConfig"]["total_epochs"],
                           eta_min=configs["TrainingConfig"]["learning_rate_end"])
     for classifier_optimizer in optimizer_h_lst:
         opt_sche_classifiers.append(
@@ -274,7 +289,7 @@ def main(args=args, configs=configs):
                                                                                                  args.target_domain))
 
     # create the initialized domain weight
-    domain_weight = create_domain_weight(len(args.source_domains))
+    # domain_weight = create_domain_weight(len(args.source_domains))
     # adjust training strategy with communication round
     batch_per_epoch, total_epochs = decentralized_training_strategy(
         communication_rounds=configs["UMDAConfig"]["communication_rounds"],
@@ -282,25 +297,30 @@ def main(args=args, configs=configs):
         batch_size=configs["TrainingConfig"]["batch_size"],
         total_epochs=configs["TrainingConfig"]["total_epochs"])
     # train generator_model
+    print("batch_per_epoch: {}\t total_epochs: {}".format(batch_per_epoch, total_epochs))
     for epoch in range(args.start_epoch, total_epochs):
-        train(train_dloaders, generator_model, classifiers, optimizer_g,
-              optimizer_h_lst, epoch, writer, num_classes=num_classes,
-              domain_weight=domain_weight, source_domains=args.source_domains,
-              batch_per_epoch=batch_per_epoch, total_epochs=total_epochs,
+        train_phase_2(train_dloader=test_dloaders_train,
+              generator_model=generator_model, classifier_list=classifiers, dis_model=dis_model, gan_model=gan_model,
+              optimizer_g=optimizer_g, optimizer_dis=optimizer_dis, optimizer_gan=optimizer_gan,
+              classifier_optimizer_list=optimizer_h_lst, epoch=epoch, writer=writer, num_classes=num_classes,
+              source_domains=args.source_domains, batch_per_epoch=batch_per_epoch, total_epochs=total_epochs,
               batchnorm_mmd=configs["UMDAConfig"]["batchnorm_mmd"],
               communication_rounds=configs["UMDAConfig"]["communication_rounds"],
               confidence_gate_begin=configs["UMDAConfig"]["confidence_gate_begin"],
               confidence_gate_end=configs["UMDAConfig"]["confidence_gate_end"],
               malicious_domain=configs["UMDAConfig"]["malicious"]["attack_domain"],
               attack_level=configs["UMDAConfig"]["malicious"]["attack_level"])
-        print("TEST_SRC")
-        test(args.target_domain, args.source_domains, test_dloaders, generator_model, classifiers, epoch,
-             writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200)
-        print("TEST_SRC_TRAIN")
-        test(args.target_domain, args.source_domains, test_dloaders_train, generator_model, classifiers, epoch,
-             writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200)
+        print("TEST")
+        test_trg(args.target_domain, args.source_domains, test_dloaders, generator_model, dis_model, gan_model, classifiers, epoch,
+             writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200, name_summary="Test")
+        print("TEST_DATA_TRAIN")
+        test_trg(args.target_domain, args.source_domains, test_dloaders_train, generator_model, dis_model, gan_model,
+                 classifiers, epoch,
+                 writer, num_classes=num_classes, top_5_accuracy=(num_classes > 10), test_iter=200, name_summary="Train")
 
         opt_sche_g.step(epoch)
+        opt_sche_dis.step(epoch)
+        opt_sche_gan.step(epoch)
         for scheduler in opt_sche_classifiers:
             scheduler.step(epoch)
         # save generator_model every 10 epochs
