@@ -41,6 +41,7 @@ class DomainNetDis(nn.Module):
         super(DomainNetDis, self).__init__()
         linear = nn.Sequential()
         linear.add_module("fc", nn.Linear(feature_dict[backbone], num_domain))
+        self.linear_raw = linear
         if data_parallel:
             self.linear = nn.DataParallel(linear)
         else:

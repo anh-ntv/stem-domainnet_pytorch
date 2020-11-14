@@ -13,7 +13,7 @@ def update_domain_weight(global_domain_weight, epoch_domain_weight, momentum=0.9
     return global_domain_weight
 
 
-def federated_average(model_list, coefficient_matrix, batchnorm_mmd=True):
+def federated_average(model_list, coefficient_matrix, batchnorm_mmd=True, update_all=True):
     """
     :param model_list: a list of all models needed in federated average. [0]: model for target domain,
     [1:-1] model for source domains
@@ -22,14 +22,17 @@ def federated_average(model_list, coefficient_matrix, batchnorm_mmd=True):
     :return model list after federated average
     """
     if batchnorm_mmd:
-        dict_list = [it.state_dict() for it in model_list]   # load
+        dict_list = [it.state_dict() for it in model_list]   # model_list cac G
         dict_item_list = [dic.items() for dic in dict_list]
         for key_data_pair_list in zip(*dict_item_list):
             source_data_list = [pair[1] * coefficient_matrix[idx] for idx, pair in
                                 enumerate(key_data_pair_list)]
             dict_list[0][key_data_pair_list[0][0]] = sum(source_data_list)
-        for model in model_list:
-            model.load_state_dict(dict_list[0])
+        if update_all:
+            for model in model_list:
+                model.load_state_dict(dict_list[0])
+        else:
+            model_list[0].load_state_dict(dict_list[0])
     else:
         named_parameter_list = [model.named_parameters() for model in model_list]
         for parameter_list in zip(*named_parameter_list):
@@ -46,8 +49,8 @@ def knowledge_vote(knowledge_list, confidence_gate, num_classes):
     :param float confidence_gate: the confidence gate to judge which sample to use
     :return: consensus_confidence,consensus_knowledge,consensus_knowledge_weight
     """
-    max_p, max_p_class = knowledge_list.max(2)
-    max_conf, _ = max_p.max(1)
+    max_p, max_p_class = knowledge_list.max(2)  # knowledge_list -> batch, num_domain, num_class
+    max_conf, _ = max_p.max(1)  # max_p -> batch, num_domain, max_conf -> batch
     max_p_mask = (max_p > confidence_gate).float().cuda()
     consensus_knowledge = torch.zeros(knowledge_list.size(0), knowledge_list.size(2)).cuda()
     for batch_idx, (p, p_class, p_mask) in enumerate(zip(max_p, max_p_class, max_p_mask)):

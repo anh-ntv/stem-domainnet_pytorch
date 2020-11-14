@@ -107,8 +107,6 @@ def main(args=args, configs=configs):
             print("DONE in", time.time()-st)
 
 
-
-
 def save_checkpoint(state, filename):
     filefolder = "{}/{}/parameter/train_time:{}".format(args.base_path, configs["DataConfig"]["dataset"],
                                                         args.train_time)
